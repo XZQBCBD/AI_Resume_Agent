@@ -1,0 +1,191 @@
+{
+  "_meta": {
+    "description": "RAG 简历问答系统测试集 —— 覆盖 9 类意图，30 个问题（含 RAG系统、Agent开发、工程实践）",
+    "created": "2026-07-21",
+    "updated": "2026-08-03",
+    "total_questions": 30,
+    "categories": ["自我介绍", "项目经历", "技术栈", "RAG系统", "Agent开发", "教育背景", "团队角色", "工程实践", "求职意向"]
+  },
+  "questions": [
+    {
+      "id": "Q01",
+      "category": "自我介绍",
+      "question": "请做自我介绍",
+      "expected_keywords": ["人工智能", "Python", "桂林理工大学", "本科"]
+    },
+    {
+      "id": "Q02",
+      "category": "自我介绍",
+      "question": "简要介绍一下你的职业背景和技术方向",
+      "expected_keywords": ["AI Agent", "RAG", "大模型", "Python"]
+    },
+    {
+      "id": "Q03",
+      "category": "自我介绍",
+      "question": "你最大的优势是什么？",
+      "expected_keywords": ["技术难点攻关", "架构设计", "RAG", "工程化"]
+    },
+    {
+      "id": "Q04",
+      "category": "项目经历",
+      "question": "你最有挑战性的项目是什么？",
+      "expected_keywords": ["AI数字分身", "RAG", "混合检索", "MamaCare"]
+    },
+    {
+      "id": "Q05",
+      "category": "项目经历",
+      "question": "详细介绍一下你的AI数字分身RAG系统",
+      "expected_keywords": ["RAG", "混合检索", "RRF", "向量", "BM25", "Prompt"]
+    },
+    {
+      "id": "Q06",
+      "category": "项目经历",
+      "question": "介绍一下MamaCare孕期智能守护助手这个项目",
+      "expected_keywords": ["MamaCare", "LangGraph", "Agent", "多意图", "RAG", "孕期"]
+    },
+    {
+      "id": "Q07",
+      "category": "项目经历",
+      "question": "你在项目中遇到过什么技术难题，怎么解决的？",
+      "expected_keywords": ["ChromaDB", "Windows", "BM25", "分词", "jieba", "自定义词"]
+    },
+    {
+      "id": "Q08",
+      "category": "项目经历",
+      "question": "你做过哪些AI相关的项目？",
+      "expected_keywords": ["AI数字分身", "MamaCare", "人脸识别", "风格迁移", "YOLOv5"]
+    },
+    {
+      "id": "Q09",
+      "category": "项目经历",
+      "question": "你在项目中用了哪些设计模式或架构设计？",
+      "expected_keywords": ["三层分离", "策略模式", "单例模式", "懒加载", "解耦"]
+    },
+    {
+      "id": "Q10",
+      "category": "技术栈",
+      "question": "你擅长哪些技术栈？",
+      "expected_keywords": ["Python", "FastAPI", "LangChain", "PyTorch", "Docker"]
+    },
+    {
+      "id": "Q11",
+      "category": "技术栈",
+      "question": "你会哪些编程语言？熟练程度如何？",
+      "expected_keywords": ["Python", "C++", "Java", "TypeScript", "Go"]
+    },
+    {
+      "id": "Q12",
+      "category": "技术栈",
+      "question": "你对大模型应用开发熟悉吗？用过哪些框架和工具？",
+      "expected_keywords": ["LangChain", "LangGraph", "OpenAI", "DeepSeek", "LlamaIndex", "RAG"]
+    },
+    {
+      "id": "Q13",
+      "category": "技术栈",
+      "question": "你对数据库、缓存和消息队列熟悉吗？",
+      "expected_keywords": ["PostgreSQL", "MySQL", "Redis", "MongoDB", "Celery", "RabbitMQ"]
+    },
+    {
+      "id": "Q14",
+      "category": "技术栈",
+      "question": "你用过哪些深度学习框架和计算机视觉工具？",
+      "expected_keywords": ["PyTorch", "TensorFlow", "Keras", "OpenCV", "YOLOv5"]
+    },
+    {
+      "id": "Q15",
+      "category": "RAG系统",
+      "question": "什么是RAG？你是如何从零设计一个RAG系统的？",
+      "expected_keywords": ["检索增强生成", "文档解析", "智能切分", "混合检索", "Prompt", "生成"]
+    },
+    {
+      "id": "Q16",
+      "category": "RAG系统",
+      "question": "你的混合检索是如何实现的？用了什么融合算法？",
+      "expected_keywords": ["Dense", "Sparse", "BM25", "RRF", "余弦相似度", "归一化", "双路召回"]
+    },
+    {
+      "id": "Q17",
+      "category": "RAG系统",
+      "question": "你是如何处理文档切分的？有什么特别的策略？",
+      "expected_keywords": ["五级切分", "结构感知", "段落优先", "句子兜底", "短块合并", "重叠", "章节标注"]
+    },
+    {
+      "id": "Q18",
+      "category": "RAG系统",
+      "question": "你的RAG系统如何做检索质量评估？",
+      "expected_keywords": ["Hit Rate", "MRR", "LLM-as-a-Judge", "A/B对比", "测试集", "RAGAS"]
+    },
+    {
+      "id": "Q19",
+      "category": "RAG系统",
+      "question": "你是如何处理PDF文档解析的？遇到乱码怎么办？",
+      "expected_keywords": ["pdfplumber", "pypdf", "OCR", "三级级联", "乱码率", "Tesseract"]
+    },
+    {
+      "id": "Q20",
+      "category": "Agent开发",
+      "question": "你有Agent开发经验吗？用的是什么框架？",
+      "expected_keywords": ["LangGraph", "Agent", "多Agent协作", "状态图", "条件路由"]
+    },
+    {
+      "id": "Q21",
+      "category": "Agent开发",
+      "question": "MamaCare项目中Agent的工作流是如何编排的？",
+      "expected_keywords": ["LangGraph", "状态图", "load_profile", "classify_intent", "条件路由", "generate_answer"]
+    },
+    {
+      "id": "Q22",
+      "category": "Agent开发",
+      "question": "你如何实现多意图识别和并行处理？",
+      "expected_keywords": ["多意图", "JSON", "结构化输出", "并行分发", "multi_dispatch", "聚合"]
+    },
+    {
+      "id": "Q23",
+      "category": "Agent开发",
+      "question": "Agent的记忆系统是如何设计的？有哪些记忆类型？",
+      "expected_keywords": ["短期记忆", "语义记忆", "用户画像", "Chroma", "PostgreSQL", "对话摘要"]
+    },
+    {
+      "id": "Q24",
+      "category": "Agent开发",
+      "question": "你项目中的安全机制是如何实现的？",
+      "expected_keywords": ["紧急关键词", "出血", "免责声明", "零幻觉", "Guard", "安全护栏"]
+    },
+    {
+      "id": "Q25",
+      "category": "教育背景",
+      "question": "你的教育背景是什么？",
+      "expected_keywords": ["桂林理工大学", "人工智能", "本科", "GPA"]
+    },
+    {
+      "id": "Q26",
+      "category": "教育背景",
+      "question": "你在学校学过哪些核心课程？",
+      "expected_keywords": ["机器学习", "深度学习", "计算机视觉", "自然语言处理", "数据结构"]
+    },
+    {
+      "id": "Q27",
+      "category": "团队角色",
+      "question": "你在团队中通常扮演什么角色？有什么特长？",
+      "expected_keywords": ["技术负责人", "架构设计", "核心模块", "技术难点攻关"]
+    },
+    {
+      "id": "Q28",
+      "category": "团队角色",
+      "question": "你有带领团队或协调多人协作的经验吗？",
+      "expected_keywords": ["4人团队", "数据标注", "模型训练", "协调"]
+    },
+    {
+      "id": "Q29",
+      "category": "工程实践",
+      "question": "你在项目中用了哪些工程化实践和设计模式？",
+      "expected_keywords": ["三层架构", "策略模式", "单例模式", "防御性编程", "MD5变更检测", "懒加载"]
+    },
+    {
+      "id": "Q30",
+      "category": "工程实践",
+      "question": "你的项目是如何部署和运维的？",
+      "expected_keywords": ["Docker", "Docker Compose", "FastAPI", "GitHub Actions", "PostgreSQL", "Redis"]
+    }
+  ]
+}

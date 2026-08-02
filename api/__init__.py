@@ -1,0 +1,1 @@
+"""FastAPI 接口层 —— 将 RAG 引擎暴露为 REST API。"""

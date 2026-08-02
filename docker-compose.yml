@@ -1,0 +1,75 @@
+# ============================================================
+# AI 数字分身 RAG 系统 - Docker Compose 部署
+# ============================================================
+version: "3.8"
+
+services:
+  # ==================== FastAPI 后端 ====================
+  api:
+    build: .
+    image: ai-resume-agent:latest
+    container_name: resume-api
+    environment:
+      - SERVICE=api
+      # LLM 配置（从 .env 文件加载，或在此覆盖）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CUSTOM_API_KEY=${CUSTOM_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - CUSTOM_BASE_URL=${CUSTOM_BASE_URL:-}
+      - CUSTOM_MODEL_NAME=${CUSTOM_MODEL_NAME:-}
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      # 数据路径（覆盖 Windows 默认值）
+      - VECTOR_DB_PATH=/app/vector_db
+      - DATA_RAW_PATH=/app/data/raw
+      - MODEL_CACHE_DIR=/home/appuser/.cache/huggingface
+      # RAG 参数（可选）
+      - TOP_K_RETRIEVAL=${TOP_K_RETRIEVAL:-5}
+      - WEIGHT_PRESET=${WEIGHT_PRESET:-balanced}
+      - TEMPERATURE=${TEMPERATURE:-0.1}
+    volumes:
+      - vector_db_data:/app/vector_db
+      - ./data/raw:/app/data/raw
+      - ./prompts:/app/prompts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== Streamlit 前端 ====================
+  app:
+    build: .
+    image: ai-resume-agent:latest
+    container_name: resume-app
+    environment:
+      - SERVICE=app
+      - API_BASE_URL=http://api:8000
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - VECTOR_DB_PATH=/app/vector_db
+      - MODEL_CACHE_DIR=/home/appuser/.cache/huggingface
+    volumes:
+      - vector_db_data:/app/vector_db
+      - ./prompts:/app/prompts
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ==================== Nginx 反向代理 ====================
+  nginx:
+    image: nginx:alpine
+    container_name: resume-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - app
+    restart: unless-stopped
+
+volumes:
+  vector_db_data:
+    driver: local

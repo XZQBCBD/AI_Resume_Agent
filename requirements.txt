@@ -1,0 +1,41 @@
+# ============================================================
+# AI Resume Agent - RAG 系统依赖
+# ============================================================
+
+# --- Web 框架 ---
+streamlit>=1.28.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# --- RAG 核心 ---
+chromadb>=0.4.18
+sentence-transformers>=2.2.2
+rank-bm25>=0.2.2
+
+# --- 文档解析 ---
+pypdf>=3.17.0
+pdfplumber>=0.10.0
+python-docx>=0.8.11
+
+# --- OCR 支持（扫描版 PDF，可选）---
+# 取消注释以启用 OCR 扫描版 PDF 识别
+# pdf2image>=1.16.0
+# pytesseract>=0.3.10
+# 另需安装 Tesseract-OCR: https://github.com/UB-Mannheim/tesseract/wiki
+
+# --- 中文分词 ---
+jieba>=0.42.1
+
+# --- LLM 客户端 ---
+openai>=1.6.0
+
+# --- 配置管理 ---
+python-dotenv>=1.0.0
+toml>=0.10.2
+
+# --- 工具库 ---
+pydantic>=2.5.0
+numpy>=1.24.0
+tiktoken>=0.5.0
+requests>=2.28.0
