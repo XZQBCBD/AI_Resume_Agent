@@ -11,7 +11,7 @@
       "id": "Q01",
       "category": "自我介绍",
       "question": "请做自我介绍",
-      "expected_keywords": ["人工智能", "Python", "桂林理工大学", "本科"]
+      "expected_keywords": ["谢作乾", "人工智能", "Python", "桂林理工大学"]
     },
     {
       "id": "Q02",

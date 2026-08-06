@@ -904,7 +904,7 @@ if __name__ == "__main__":
         evaluator.compare_presets()
 
     elif "--extended" in sys.argv:
-        # 扩展基准测试模式（20题 + 高级指标）
+        # 扩展基准测试模式（30题 + 高级指标）
         evaluator.run_extended_benchmark()
 
     elif "--question" in sys.argv:

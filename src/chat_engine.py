@@ -76,11 +76,20 @@ class RAGChatEngine:
                 "used_files": [],
             }
 
-        # 2. 增强（Augment）—— 拼接上下文
-        context = "\n\n---\n\n".join([
-            f"[来源: {r['source']} ({r['file_type']})]\n{r['content']}"
-            for r in retrieved
-        ])
+        # 2. 增强（Augment）—— 拼接上下文（含项目归属 + 章节类型元信息）
+        # section_type 中文标签映射
+        SECTION_LABELS = {
+            "education": "教育背景", "project": "项目经历", "skills": "技能",
+            "experience": "工作经历", "self_intro": "自我介绍", "awards": "荣誉奖项",
+            "contact": "联系方式", "recommendation": "推荐信", "general": "综合",
+        }
+        context_parts = []
+        for r in retrieved:
+            sec_label = SECTION_LABELS.get(r.get("section_type", "general"), "综合")
+            context_parts.append(
+                f"[项目: {r.get('project', '其他')} | 来源: {r['source']} | 章节: {sec_label}]\n{r['content']}"
+            )
+        context = "\n\n---\n\n".join(context_parts)
 
         # 3. 生成（Generate）—— 填充 Prompt + 调用 LLM
         system_prompt = self.prompt_loader.build_system_prompt(

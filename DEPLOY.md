@@ -104,8 +104,9 @@ LLM_PROVIDER=deepseek
 HF_ENDPOINT=https://hf-mirror.com
 
 # RAG 参数（保持默认即可）
-TOP_K_RETRIEVAL=5
+TOP_K_RETRIEVAL=8
 WEIGHT_PRESET=balanced
+MMR_LAMBDA=0.7
 TEMPERATURE=0.1
 EOF
 ```
@@ -116,7 +117,7 @@ EOF
 # 把你的简历、项目文档等放到 data/raw/ 目录
 # 支持 PDF / DOCX / MD / TXT 格式
 ls data/raw/
-# 示例输出: 01_简历_张三.pdf  02_项目_xxx.md  03_博客_xxx.md
+# 示例输出: 01_简历_谢作乾.pdf  02_项目_xxx.md  03_博客_xxx.md
 ```
 
 ### 6. 构建并启动

@@ -1,5 +1,5 @@
 # ============================================================
-# AI Resume Agent - RAG 系统依赖
+# AI 数字分身 RAG 系统 — Python 依赖
 # ============================================================
 
 # --- Web 框架 ---
@@ -8,8 +8,7 @@ fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
 
-# --- RAG 核心 ---
-chromadb>=0.4.18
+# --- RAG 核心（零 ChromaDB 依赖，自研 NumPy 向量检索）---
 sentence-transformers>=2.2.2
 rank-bm25>=0.2.2
 

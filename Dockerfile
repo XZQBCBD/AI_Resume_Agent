@@ -3,7 +3,7 @@
 # ============================================================
 FROM python:3.10-slim
 
-LABEL maintainer="your-username"
+LABEL maintainer="xiezuoqian"
 LABEL description="AI Resume Agent - RAG-based personal AI digital twin"
 
 # 设置工作目录
@@ -20,8 +20,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 预下载 embedding 模型（避免运行时下载）
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# 预下载 embedding 模型（使用国内镜像，避免运行时下载）
+# 注意：BAAI/bge-small-zh-v1.5 中文优化，512 维，效果优于 all-MiniLM-L6-v2
+ENV HF_ENDPOINT=https://hf-mirror.com
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-zh-v1.5')"
 
 # 复制项目代码
 COPY . .

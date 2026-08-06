@@ -64,7 +64,7 @@ class Settings:
     属性：
         PROJECT_ROOT: 项目根目录（自动推断）
         DATA_RAW_PATH: 原始文档存放路径（默认 data/raw，可通过环境变量覆盖）
-        VECTOR_DB_PATH: ChromaDB 持久化路径
+        VECTOR_DB_PATH: 向量索引持久化路径
         MODEL_CACHE_DIR: HuggingFace 模型缓存路径（必须为非系统盘）
         PROMPT_FILE_PATH: Prompt 模板文件路径
         TOP_K_RETRIEVAL: 最终返回的文档片段数量
@@ -118,11 +118,14 @@ class Settings:
 
     # ========== 检索参数 ==========
     TOP_K_RETRIEVAL: int = _safe_int("TOP_K_RETRIEVAL", 8)
-    VECTOR_WEIGHT: float = _safe_float("VECTOR_WEIGHT", 0.6)
-    BM25_WEIGHT: float = _safe_float("BM25_WEIGHT", 0.4)
+    VECTOR_WEIGHT: float = _safe_float("VECTOR_WEIGHT", 0.5)
+    BM25_WEIGHT: float = _safe_float("BM25_WEIGHT", 0.5)
     TOP_K_CANDIDATE: int = 10  # 各通路召回候选数
     RRF_K: int = _safe_int("RRF_K", 60)  # RRF 融合常数（越大排名差异越平滑）
     BM25_SCORE_THRESHOLD: float = 0.05  # BM25 最低分数阈值，过滤噪声
+    SECTION_BOOST_FACTOR: float = 1.2   # section_type 匹配时的加权系数
+    MMR_LAMBDA: float = 0.7             # MMR 相关性/多样性平衡（越大越偏相关性）
+    DEDUP_SIM_THRESHOLD: float = 0.85   # 跨文档去重相似度阈值
 
     # ========== 权重预设（A/B 测试用）==========
     WEIGHT_PRESETS = {
@@ -145,7 +148,7 @@ class Settings:
 
     # ========== 嵌入模型 ==========
     EMBEDDING_MODEL: str = os.getenv(
-        "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+        "EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"
     )
 
     # ========== LLM Provider 配置 ==========

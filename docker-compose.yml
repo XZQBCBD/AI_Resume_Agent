@@ -24,8 +24,11 @@ services:
       - DATA_RAW_PATH=/app/data/raw
       - MODEL_CACHE_DIR=/home/appuser/.cache/huggingface
       # RAG 参数（可选）
-      - TOP_K_RETRIEVAL=${TOP_K_RETRIEVAL:-5}
+      - TOP_K_RETRIEVAL=${TOP_K_RETRIEVAL:-8}
       - WEIGHT_PRESET=${WEIGHT_PRESET:-balanced}
+      - MMR_LAMBDA=${MMR_LAMBDA:-0.7}
+      - DEDUP_SIM_THRESHOLD=${DEDUP_SIM_THRESHOLD:-0.85}
+      - SECTION_BOOST_FACTOR=${SECTION_BOOST_FACTOR:-1.2}
       - TEMPERATURE=${TEMPERATURE:-0.1}
     volumes:
       - vector_db_data:/app/vector_db

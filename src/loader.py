@@ -99,6 +99,37 @@ def infer_file_type(filename: str) -> str:
     return "其他文档"
 
 
+# 文件名关键词 → 项目归属映射
+# 用于区分同一 file_type（如"项目"）下的不同项目
+PROJECT_KEYWORDS = [
+    ("AI数字分身", "AI数字分身RAG系统"),
+    ("AI 数字分身", "AI数字分身RAG系统"),
+    ("RAG系统", "AI数字分身RAG系统"),
+    ("MamaCare", "MamaCare孕期智能守护助手"),
+    ("孕期", "MamaCare孕期智能守护助手"),
+    ("个人总结", "个人背景"),
+    ("简历", "个人背景"),
+    ("技能", "技能全景"),
+]
+
+
+def infer_project(filename: str) -> str:
+    """根据文件名推断 chunk 所属的具体项目。
+
+    用于解决多个项目文档共享同一 file_type="项目" 时的跨项目混淆问题。
+
+    Args:
+        filename: 文件名
+
+    Returns:
+        项目名称（如 AI数字分身RAG系统 / MamaCare孕期智能守护助手 / 个人背景 / 技能全景）
+    """
+    for keyword, project in PROJECT_KEYWORDS:
+        if keyword in filename:
+            return project
+    return "其他"
+
+
 # ============================================================
 # 文档解析器（策略模式）
 # ============================================================
@@ -420,6 +451,9 @@ class TextChunker:
         r'(?:^|\n)(?:\d+[.、．)]\s*|[-•·]\s*|[（(]\d+[)）]\s*|第[一二三四五六七八九十\d]+[章节条款]|#+\s)',
         re.MULTILINE,
     )
+    # Markdown 表格检测正则
+    TABLE_ROW_PATTERN = re.compile(r'^\|.+\|$')
+    TABLE_SEP_PATTERN = re.compile(r'^\|[\s\-:]+\|$')
 
     def __init__(self, max_chunk_chars: int = 500, chunk_overlap: int = 100,
                  min_chunk_size: int = 200):
@@ -437,6 +471,91 @@ class TextChunker:
             r'(?<=[。！？.!?\n])\s*'
         )
 
+    def _protect_tables(self, text: str) -> str:
+        """在 Markdown 表格块前后插入 __SPLIT__ 标记，防止表格被切碎。
+
+        表格行（|...|）和分隔行（|---|）被识别为连续表格块，
+        作为不可分割的原子单元。
+        """
+        lines = text.split("\n")
+        result: list[str] = []
+        in_table = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            is_table_line = bool(self.TABLE_ROW_PATTERN.match(stripped))
+            is_sep_line = bool(self.TABLE_SEP_PATTERN.match(stripped))
+
+            if is_table_line or is_sep_line:
+                if not in_table:
+                    # 表格开始 → 插入分隔标记
+                    if result and result[-1] != "__SPLIT__":
+                        result.append("__SPLIT__")
+                    in_table = True
+                result.append(line)
+            else:
+                if in_table:
+                    # 表格结束 → 插入分隔标记
+                    result.append("__SPLIT__")
+                    in_table = False
+                result.append(line)
+
+        if in_table:
+            result.append("__SPLIT__")
+
+        return "\n".join(result)
+
+    def _protect_code_blocks(self, text: str) -> str:
+        """保护代码块/目录树不被切碎。
+
+        检测特征：连续 5 行以上短行（<50字符）、含制表符（│├└）或
+        代码特征（缩进/花括号/关键字），用 __SPLIT__ 包裹为不可分割单元。
+        """
+        lines = text.split("\n")
+        result: list[str] = []
+        # 当前连续短行的缓冲区
+        buf: list[str] = []
+        # 盒绘图字符
+        BOX_CHARS = set("│├└┌┐┘┤┬┴┼▸▼▶")
+
+        def _is_short_code_line(stripped: str) -> bool:
+            """判断单行是否为代码/目录树片段。"""
+            if not stripped:
+                return False
+            # 盒绘图字符 → 目录树
+            if any(ch in BOX_CHARS for ch in stripped):
+                return True
+            # 短行 + 代码特征（缩进/特殊符号/关键字）
+            if len(stripped) < 50:
+                if (stripped.startswith(("  ", "\t", "# ", "//", "/*", "* ", "> "))
+                        or any(kw in stripped for kw in ("def ", "class ", "import ", "from ", "return "))
+                        or stripped.startswith(("{", "}", "(", ")", "[", "]", "<", ">"))
+                        or stripped.startswith(("├", "└", "│", "┌", "┐"))):
+                    return True
+            return False
+
+        def _flush_buf():
+            """将缓冲区内容包裹为受保护块。"""
+            if len(buf) >= 5:
+                if result and result[-1] != "__SPLIT__":
+                    result.append("__SPLIT__")
+                result.extend(buf)
+                result.append("__SPLIT__")
+            else:
+                result.extend(buf)
+            buf.clear()
+
+        for line in lines:
+            stripped = line.strip()
+            if _is_short_code_line(stripped):
+                buf.append(line)
+            else:
+                _flush_buf()
+                result.append(line)
+
+        _flush_buf()
+        return "\n".join(result)
+
     def split(self, text: str) -> List[str]:
         """将长文本切分为语义块，平衡长度分布。
 
@@ -446,6 +565,11 @@ class TextChunker:
         Returns:
             文本块列表（长度集中在 min_chunk_size ~ max_chunk_chars）
         """
+        # 预处理：保护代码块/目录树不被切碎
+        text = self._protect_code_blocks(text)
+        # 预处理：保护 Markdown 表格不被切碎
+        text = self._protect_tables(text)
+
         # 第一步：按列表/标题硬边界切分，再按段落切分
         paragraphs = self._split_by_structure(text)
 
@@ -657,33 +781,48 @@ class DocumentLoader:
             logger.warning("⚠️ 文件 %s 无有效文本内容", file_path.name)
             return []
 
-        # 3. 推断文件类型
+        # 3. 推断文件类型和项目归属
         file_type = infer_file_type(file_path.name)
+        project = infer_project(file_path.name)
 
         # 4. 检测章节标题（用于标注 section_type）
         headings = detect_headings_in_text(raw_text)
 
-        # 5. 切分为文本块
-        chunk_texts = self.chunker.split(raw_text)
+        # 5. 无重叠切分 → 用于确定每个 chunk 在原文中的位置和 section_type
+        saved_overlap = self.chunker.chunk_overlap
+        self.chunker.chunk_overlap = 0
+        clean_texts = self.chunker.split(raw_text)
+        self.chunker.chunk_overlap = saved_overlap
 
-        # 6. 为每个块附加元数据（含 section_type）
-        chunks = []
-        total = len(chunk_texts)
-        for i, text in enumerate(chunk_texts):
-            # 找到该 chunk 所属的章节标题（chunk 开头之前最近的标题）
-            chunk_start = raw_text.find(text) if text in raw_text else -1
-            chunk_headings = []
-            if chunk_start >= 0:
-                chunk_line = raw_text[:chunk_start].count("\n")
+        # 6. 确定每个 clean chunk 的 section_type（基于原文位置匹配章节标题）
+        clean_section_types: list[str] = []
+        search_from = 0
+        for text in clean_texts:
+            pos = raw_text.find(text, search_from)
+            if pos >= 0:
+                chunk_line = raw_text[:pos].count("\n")
                 chunk_headings = [
                     h_text for h_line, h_text in headings if h_line <= chunk_line
                 ]
+                search_from = pos + max(len(text), 1)
+            else:
+                chunk_headings = []
+            clean_section_types.append(detect_section_type(text, chunk_headings))
 
-            section_type = detect_section_type(text, chunk_headings)
+        # 7. 正常切分（带重叠，用于实际索引和检索）
+        chunk_texts = self.chunker.split(raw_text)
+
+        # 8. 为每个块附加元数据（section_type 来自 clean 切分的对应位置）
+        chunks = []
+        total = len(chunk_texts)
+        for i, text in enumerate(chunk_texts):
+            # clean_texts 和 chunk_texts 数量相同（重叠不影响块数量）
+            section_type = clean_section_types[i] if i < len(clean_section_types) else "general"
 
             metadata = {
                 "source": file_path.name,
                 "file_type": file_type,
+                "project": project,
                 "section_type": section_type,
                 "chunk_index": i,
                 "total_chunks": total,

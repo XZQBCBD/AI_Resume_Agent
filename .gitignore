@@ -14,9 +14,8 @@ build/
 .venv/
 venv/
 
-# --- 数据与索引（本地生成）---
-data/raw/*
-!data/raw/.gitkeep
+# --- 数据与索引（本地生成，代码自动创建目录和示例文件）---
+data/raw/
 vector_db/
 
 # --- Streamlit ---
@@ -34,6 +33,11 @@ Thumbs.db
 
 # --- Claude Code 内部文件 ---
 .claude/
+
+# --- 开发笔记与过程文档 ---
+rag.md
+AI数字分身RAG系统*.md
+RAG系统开发踩坑记录与面试复盘.md
 
 # --- 规划设计文档 ---
 docs/superpowers/

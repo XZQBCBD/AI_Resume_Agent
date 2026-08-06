@@ -1,10 +1,12 @@
 """
-混合检索器 —— Dense（向量语义）+ Sparse（BM25 关键词）+ 融合排序。
+混合检索器 —— Dense（向量语义）+ Sparse（BM25 关键词）+ RRF 融合 + MMR 多样性 + 跨文档去重。
 
 职责：
-    1. Dense 通路：用户问题 → embedding → numpy 余弦相似度（Top-10）
-    2. Sparse 通路：用户问题 → jieba 分词 → BM25.get_scores（Top-10）
-    3. 融合排序：Min-Max 归一化 → 加权求和（0.6 + 0.4）→ Top-K
+    1. Dense 通路：用户问题 → embedding → numpy 余弦相似度
+    2. Sparse 通路：用户问题 → jieba 分词 → BM25.get_scores
+    3. RRF 融合排序 → 查询意图识别 + section_type 加权
+    4. MMR 多样性选取 + 跨文档去重
+    5. 最终展示分数 Min-Max 归一化
 
 使用方式：
     from src.retriever import HybridRetriever
@@ -27,10 +29,15 @@ logger = logging.getLogger(__name__)
 class HybridRetriever:
     """Dense + Sparse 混合检索器。
 
-    采用双路召回 + 加权融合策略：
-    - Dense 通路：通过句子嵌入捕获语义相似性
-    - Sparse 通路：通过 BM25 关键词匹配保证精确召回
-    - 融合：Min-Max 归一化后加权求和
+    检索流水线（8 步）：
+    - Dense 通路：BGE-small-zh-v1.5 向量余弦相似度检索
+    - Sparse 通路：BM25 + jieba 增强分词关键词检索
+    - RRF 融合排序（k=60）
+    - 查询意图识别 + section_type 加权（×1.2）
+    - MMR 多样性选取（λ=0.7, 同文档≤2条）
+    - 跨文档去重（相似度 > 0.85）
+    - 候补补充（不足 top_k 时从 MMR 剩余中补充）
+    - 最终展示分数 Min-Max 归一化
     """
 
     def __init__(self):
@@ -68,14 +75,14 @@ class HybridRetriever:
         )
 
     def search(self, query: str, top_k: Optional[int] = None) -> List[Dict]:
-        """执行混合检索。
+        """执行混合检索 —— 含查询意图加权 + MMR 多样性 + 跨文档去重。
 
         Args:
             query: 用户查询问题
             top_k: 返回结果数量（默认使用 config 中的 TOP_K_RETRIEVAL）
 
         Returns:
-            结果列表，每项包含 content, source, score, file_type, chunk_index
+            结果列表，每项包含 content, source, score, file_type, chunk_index, section_type
         """
         if top_k is None:
             top_k = self.settings.TOP_K_RETRIEVAL
@@ -89,10 +96,65 @@ class HybridRetriever:
         # 2. Sparse 通路：BM25 关键词检索
         sparse_results = self._sparse_search(query, n_candidates=n_candidates)
 
-        # 3. RRF 融合排序
-        fused = self._fuse_results_rrf(dense_results, sparse_results, top_k)
+        # 3. RRF 融合排序（候选池 = n_candidates × 2，后续 MMR 在此范围内选取）
+        fused = self._fuse_results_rrf(dense_results, sparse_results, top_k=len(dense_results) + len(sparse_results))
 
-        return fused
+        # 4. 查询意图识别 → section_type 加权
+        query_intents = self._detect_query_intent(query)
+        if query_intents:
+            fused = self._apply_section_boost(fused, query_intents)
+
+        # 5. 目标项目识别 → 非目标项目从候选池分离（后备池仅在不足时使用）
+        target_project = self._detect_target_project(query)
+        if target_project:
+            fused, project_backup = self._apply_project_filter(fused, target_project)
+        else:
+            project_backup = []
+
+        # 6. MMR 多样性选取（λ=0.7, 同文档最多2条）
+        mmr_results = self._apply_mmr(
+            fused, top_k,
+            lambda_param=self.settings.MMR_LAMBDA,
+            max_per_source=2,
+        )
+
+        # 7. 跨文档去重（相似度 > 0.85 视为重复）
+        final_results = self._dedup_cross_source(
+            mmr_results, threshold=self.settings.DEDUP_SIM_THRESHOLD,
+        )
+
+        # 8. 去重后若不够 top_k，从 MMR 剩余候选 + 后备池补充
+        if len(final_results) < top_k:
+            existing_keys = {
+                (r["source"], r["chunk_index"]) for r in final_results
+            }
+            for item in mmr_results + project_backup:
+                if len(final_results) >= top_k:
+                    break
+                key = (item["source"], item["chunk_index"])
+                if key not in existing_keys:
+                    final_results.append(item)
+                    existing_keys.add(key)
+
+        # 9. 最终展示分数归一化
+        if final_results:
+            dense_raw = [item.get("dense_score", 0) for item in final_results]
+            sparse_raw = [item.get("sparse_score", 0) for item in final_results]
+
+            def _norm(values):
+                mn, mx = min(values), max(values)
+                if mx == mn:
+                    return [1.0] * len(values)
+                return [(v - mn) / (mx - mn) for v in values]
+
+            d_norm = _norm(dense_raw)
+            s_norm = _norm(sparse_raw)
+            w_d = self.settings.VECTOR_WEIGHT
+            w_s = self.settings.BM25_WEIGHT
+            for i, item in enumerate(final_results):
+                item["score"] = round(w_d * d_norm[i] + w_s * s_norm[i], 4)
+
+        return final_results
 
     def _dense_search(self, query: str, n_candidates: int | None = None) -> List[Dict]:
         """Dense 通路：向量语义检索（余弦相似度）。
@@ -139,6 +201,8 @@ class HybridRetriever:
                 "content": chunk["content"],
                 "source": chunk["metadata"].get("source", "unknown"),
                 "file_type": chunk["metadata"].get("file_type", "其他文档"),
+                "project": chunk["metadata"].get("project", "其他"),
+                "section_type": chunk["metadata"].get("section_type", "general"),
                 "chunk_index": chunk["metadata"].get("chunk_index", 0),
                 "score": float(sim),
                 "score_type": "dense",
@@ -187,6 +251,8 @@ class HybridRetriever:
                 "content": chunk["content"],
                 "source": chunk["metadata"].get("source", "unknown"),
                 "file_type": chunk["metadata"].get("file_type", "其他文档"),
+                "project": chunk["metadata"].get("project", "其他"),
+                "section_type": chunk["metadata"].get("section_type", "general"),
                 "chunk_index": chunk["metadata"].get("chunk_index", 0),
                 "score": float(scores[idx]),
                 "score_type": "sparse",
@@ -345,6 +411,251 @@ class HybridRetriever:
             {**item, "score": (item["score"] - min_s) / (max_s - min_s)}
             for item in items
         ]
+
+    # ── 查询意图 → section_type 映射（用于检索加权）──
+    QUERY_INTENT_PATTERNS: dict[str, list[str]] = {
+        "skills":      ["技能", "技术栈", "框架", "语言", "工具", "掌握", "精通",
+                        "熟练", "会什么", "编程", "开发能力", "擅长", "用过"],
+        "education":   ["教育", "学校", "毕业", "学历", "专业", "课程", "GPA",
+                        "学位", "大学", "学院", "成绩"],
+        "project":     ["项目", "开发", "架构", "系统", "实现", "设计", "经历",
+                        "经验", "RAG", "Agent", "MamaCare", "数字分身"],
+        "experience":  ["工作", "实习", "任职", "公司", "团队", "角色"],
+        "self_intro":  ["自我介绍", "介绍你自己", "背景", "你是谁", "个人总结",
+                        "概述", "简单介绍"],
+        "awards":      ["获奖", "荣誉", "证书", "竞赛", "奖学金", "比赛"],
+        "contact":     ["联系", "邮箱", "电话", "GitHub", "地址"],
+    }
+
+    def _detect_query_intent(self, query: str) -> set[str]:
+        """根据查询关键词识别用户意图对应的 section_type。
+
+        Args:
+            query: 用户查询文本
+
+        Returns:
+            匹配的 section_type 集合（可能为空）
+        """
+        matched: set[str] = set()
+        for sec_type, keywords in self.QUERY_INTENT_PATTERNS.items():
+            if any(kw in query for kw in keywords):
+                matched.add(sec_type)
+        return matched
+
+    # ── 查询意图 → 目标项目映射（用于跨项目过滤）──
+    PROJECT_KEYWORDS: dict[str, list[str]] = {
+        "AI数字分身RAG系统":       ["AI数字分身", "AI 数字分身", "RAG系统", "RAG 系统",
+                                   "数字分身", "混合检索", "RRF", "五级切分", "六级切分"],
+        "MamaCare孕期智能守护助手": ["MamaCare", "孕期", "智能守护", "孕妇", "产检",
+                                   "多Agent", "多 Agent", "LangGraph"],
+    }
+
+    def _detect_target_project(self, query: str) -> str | None:
+        """根据查询关键词识别用户想了解的目标项目。
+
+        Args:
+            query: 用户查询文本
+
+        Returns:
+            目标项目名，无法判断时返回 None
+        """
+        for project, keywords in self.PROJECT_KEYWORDS.items():
+            if any(kw in query for kw in keywords):
+                return project
+        return None
+
+    def _apply_project_filter(
+        self, candidates: list[dict], target_project: str | None
+    ) -> tuple[list[dict], list[dict]]:
+        """将非目标项目的 chunk 从候选池中分离，消除跨项目污染。
+
+        目标项目 chunk 参与后续 MMR/去重/归一化，
+        非目标项目 chunk 作为后备池——仅在目标项目候选不足 top_k 时使用。
+
+        Args:
+            candidates: RRF 融合后的候选列表
+            target_project: 目标项目名（None 时不做分离）
+
+        Returns:
+            (目标项目候选, 非目标项目后备池)
+        """
+        if not target_project:
+            return candidates, []
+        matched = [item for item in candidates if item.get("project", "") == target_project]
+        backup = [item for item in candidates if item.get("project", "") != target_project]
+        return matched, backup
+
+    def _get_chunk_embedding(self, source: str, chunk_index: int):
+        """获取指定 chunk 的向量嵌入。
+
+        Args:
+            source: 文档来源文件名
+            chunk_index: chunk 在文件中的序号
+
+        Returns:
+            numpy 向量，找不到时返回 None
+        """
+        if self.embeddings is None:
+            return None
+        for i, chunk in enumerate(self.all_chunks):
+            meta = chunk.get("metadata", {})
+            if (meta.get("source") == source
+                    and meta.get("chunk_index") == chunk_index):
+                if i < len(self.embeddings):
+                    return self.embeddings[i]
+        return None
+
+    def _apply_section_boost(
+        self, candidates: list[dict], query_intents: set[str]
+    ) -> list[dict]:
+        """对 section_type 匹配查询意图的候选块做 RRF 分数加权。
+
+        Args:
+            candidates: RRF 融合后的候选列表
+            query_intents: 查询意图匹配的 section_type 集合
+
+        Returns:
+            加权并重新排序后的候选列表
+        """
+        if not query_intents or not candidates:
+            return candidates
+        boost = self.settings.SECTION_BOOST_FACTOR
+        for item in candidates:
+            if item.get("section_type", "general") in query_intents:
+                item["rrf_raw"] = item.get("rrf_raw", 0) * boost
+        candidates.sort(key=lambda x: x.get("rrf_raw", 0), reverse=True)
+        return candidates
+
+    def _apply_mmr(
+        self,
+        candidates: list[dict],
+        top_k: int,
+        lambda_param: float = 0.7,
+        max_per_source: int = 2,
+    ) -> list[dict]:
+        """MMR（Maximal Marginal Relevance）多样性选取。
+
+        在保持相关性的前提下，惩罚与已选结果过于相似的候选，
+        同时限制同一文档最多入选 max_per_source 条。
+
+        Args:
+            candidates: 按相关性排序的候选列表
+            top_k: 最终选取数量
+            lambda_param: 相关性权重（0~1，越大越偏向相关性）
+            max_per_source: 同一文档最大入选条数
+
+        Returns:
+            多样性优化后的 top_k 列表
+        """
+        if len(candidates) <= top_k:
+            return candidates
+
+        # 预计算所有候选的嵌入向量
+        emb_cache: dict[int, np.ndarray | None] = {}
+        for item in candidates:
+            emb = self._get_chunk_embedding(
+                item.get("source", ""), item.get("chunk_index", 0)
+            )
+            emb_cache[id(item)] = emb
+
+        selected: list[dict] = []
+        remaining: list[dict] = list(candidates)
+
+        # 首轮：取 RRF 最高分
+        selected.append(remaining.pop(0))
+
+        while len(selected) < top_k and remaining:
+            best_score = float("-inf")
+            best_idx = -1
+
+            for i, item in enumerate(remaining):
+                relevance = item.get("rrf_raw", 0)
+
+                # 多样性：与已选结果的最大余弦相似度
+                max_sim = 0.0
+                item_emb = emb_cache.get(id(item))
+                if item_emb is not None:
+                    for sel in selected:
+                        sel_emb = emb_cache.get(id(sel))
+                        if sel_emb is not None:
+                            sim = float(
+                                np.dot(item_emb, sel_emb)
+                                / (np.linalg.norm(item_emb) * np.linalg.norm(sel_emb) + 1e-8)
+                            )
+                            max_sim = max(max_sim, sim)
+
+                # 同源限制
+                item_source = item.get("source", "")
+                source_count = sum(
+                    1 for s in selected if s.get("source") == item_source
+                )
+                source_penalty = 0.0 if source_count < max_per_source else -100.0
+
+                mmr_score = (
+                    lambda_param * relevance
+                    - (1 - lambda_param) * max_sim
+                    + source_penalty
+                )
+
+                if mmr_score > best_score:
+                    best_score = mmr_score
+                    best_idx = i
+
+            if best_idx >= 0:
+                selected.append(remaining.pop(best_idx))
+            else:
+                break
+
+        return selected
+
+    def _dedup_cross_source(
+        self, results: list[dict], threshold: float = 0.85
+    ) -> list[dict]:
+        """跨文档去重：移除不同文件间内容高度相似的 chunk。
+
+        仅比较不同 source 的 chunk，保留排名靠前的。
+
+        Args:
+            results: 最终结果列表
+            threshold: 余弦相似度阈值（超过此值视为重复）
+
+        Returns:
+            去重后的结果列表
+        """
+        if len(results) <= 1:
+            return results
+
+        emb_cache: dict[int, np.ndarray | None] = {}
+        for item in results:
+            emb = self._get_chunk_embedding(
+                item.get("source", ""), item.get("chunk_index", 0)
+            )
+            emb_cache[id(item)] = emb
+
+        to_remove: set[int] = set()
+        for i in range(len(results)):
+            if i in to_remove:
+                continue
+            emb_i = emb_cache.get(id(results[i]))
+            if emb_i is None:
+                continue
+            for j in range(i + 1, len(results)):
+                if j in to_remove:
+                    continue
+                # 同一文档已由 MMR 的同源限制处理
+                if results[i].get("source") == results[j].get("source"):
+                    continue
+                emb_j = emb_cache.get(id(results[j]))
+                if emb_j is None:
+                    continue
+                sim = float(
+                    np.dot(emb_i, emb_j)
+                    / (np.linalg.norm(emb_i) * np.linalg.norm(emb_j) + 1e-8)
+                )
+                if sim > threshold:
+                    to_remove.add(j)
+
+        return [r for i, r in enumerate(results) if i not in to_remove]
 
     def _load_embeddings(self):
         """从磁盘加载向量嵌入。"""
